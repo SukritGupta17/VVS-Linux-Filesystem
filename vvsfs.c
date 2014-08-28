@@ -7,7 +7,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-#include <linux/smp_lock.h>
+// #include <linux/smp_lock.h>
 #include <linux/statfs.h>
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
@@ -154,7 +154,7 @@ vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 // vvsfs_lookup - A directory name in a directory. It basically attaches the inode 
 //                of the file to the directory entry.
 static struct dentry *
-vvsfs_lookup(struct inode *dir, struct dentry *dentry,  struct nameidata *nd)
+vvsfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 
   int nodirs;
@@ -210,14 +210,15 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
 
   if (DEBUG) printk("vvsfs - new inode\n");
   
+  if (!dir) return NULL;
   sb = dir->i_sb;
 
   /* get an vfs inode */
-  if (!dir || !(inode = new_inode(sb)))
-    return NULL;
+  inode = new_inode(sb);
+  if (!inode) return NULL;
  
-  inode->i_sb = sb;
-  inode->i_flags = 0;
+//  inode->i_sb = sb;
+//  inode->i_flags = 0;
   
  
   /* find a spare inode in the vvsfs */
@@ -236,7 +237,7 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
 
   inode->i_ino = newinodenumber;
   
-  inode->i_nlink = 1;
+//  inode->i_nlink = 1;
   inode->i_size = 0;
   
   inode->i_uid = 0;
@@ -255,8 +256,8 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
 
 // vvsfs_create - create a new file in a directory 
 static int
-vvsfs_create(struct inode *dir,struct dentry* dentry,int mode, struct nameidata *nd) {
-
+vvsfs_create(struct inode *dir, struct dentry* dentry, umode_t mode, bool excl)
+{
   struct vvsfs_inode dirdata;
   int nodirs;
   struct vvsfs_dir_entry *dent;
@@ -307,7 +308,7 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   struct super_block * sb;
   char * p;
 
-  if (DEBUG) printk("vvsfs - file write - count : %d ppos %Ld\n",count,*ppos);
+  if (DEBUG) printk("vvsfs - file write - count : %zu ppos %Ld\n",count,*ppos);
 
   if (!inode) {
     printk("vvsfs - Problem with file inode\n");
@@ -346,7 +347,7 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   vvsfs_writeblock(sb,inode->i_ino,&filedata);
  
   
-  if (DEBUG) printk("vvsfs - file write done : %d ppos %Ld\n",count,*ppos);
+  if (DEBUG) printk("vvsfs - file write done : %zu ppos %Ld\n",count,*ppos);
   
   return count;
 }
@@ -364,7 +365,7 @@ vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 
   struct super_block * sb;
   
-  if (DEBUG) printk("vvsfs - file read - count : %d ppos %Ld\n",count,*ppos);
+  if (DEBUG) printk("vvsfs - file read - count : %zu ppos %Ld\n",count,*ppos);
 
 
 
@@ -391,7 +392,7 @@ vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
    printk("rr\n");
   size = MIN (inode->i_size - *ppos,count);
 
- printk("readblock : %d\n", size);
+ printk("readblock : %zu\n", size);
   offset = *ppos;            
   *ppos += size;
 
@@ -434,7 +435,7 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     if (DEBUG) {
         printk("vvsfs - iget - ino : %d", (unsigned int) ino);
-        printk(" super %x\n",(unsigned int) sb);  
+        printk(" super %p\n", sb);  
     }
 
     inode = iget_locked(sb, ino);
@@ -445,7 +446,7 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
 
-    inode->i_nlink = 1;
+//    inode->i_nlink = 1;
     inode->i_size = filedata.size;
  
     inode->i_uid = 0;
@@ -490,7 +491,7 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
   i->i_mode = S_IRUGO|S_IWUGO|S_IXUGO|S_IFDIR;
   i->i_op = &vvsfs_dir_inode_operations;
   i->i_fop = &vvsfs_dir_operations; 
-  printk("inode %x\n",(unsigned int) i);
+  printk("inode %p\n", i);
 
 
   hblock = bdev_logical_block_size(s->s_bdev);
@@ -505,7 +506,8 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
   s->s_blocksize_bits = BLOCKSIZE_BITS;
 
 
-  s->s_root = d_alloc_root(i);           /*2.4*/
+//  s->s_root = d_alloc_root(i);           /*2.4*/
+  s->s_root = d_make_root(i);
 
   return 0;
 }
@@ -518,16 +520,24 @@ static struct super_operations vvsfs_ops = {
 };
 
 
-static int vvsfs_get_sb(struct file_system_type *fs_type,
-        int flags, const char *dev_name, void *data, struct vfsmount *mnt)
+// static int vvsfs_get_sb(struct file_system_type *fs_type,
+//         int flags, const char *dev_name, void *data, struct vfsmount *mnt)
+// {
+//         return get_sb_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super, mnt);
+// }
+//
+static struct dentry *vvsfs_mount(struct file_system_type *fs_type,
+				    int flags, const char *dev_name, void *data)
 {
-        return get_sb_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super, mnt);
+		    return mount_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super);
 }
+
 
 static struct file_system_type vvsfs_type = {
         .owner          = THIS_MODULE,
         .name           = "vvsfs",
-        .get_sb         = vvsfs_get_sb,
+		.mount			= vvsfs_mount,
+//        .get_sb         = vvsfs_get_sb,
         .kill_sb        = kill_block_super,
         .fs_flags       = FS_REQUIRES_DEV,
 };
