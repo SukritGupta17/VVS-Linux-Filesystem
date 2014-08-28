@@ -1,16 +1,17 @@
-
-
-/* view.vvsfs - print a summary of the data in the entire file system
-   Eric McCreath 2006 GPL */
-
-/* To compile :
-     gcc view.vvsfs.c -o view.vvsfs
-
-*/
+/*
+ * view.vvsfs - print a summary of the data in the entire file system
+ *
+ * Eric McCreath 2006 GPL
+ * To compile :
+ *   gcc view.vvsfs.c -o view.vvsfs
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "vvsfs.h"
 
 char* device_name;
@@ -50,11 +51,11 @@ int main(int argc, char ** argv) {
 
     if (inode.is_directory) {
       int k, nodirs;
-      struct vvsfs_dir_entry *dent;
+      struct vvsfs_dir_entry *dent = (struct vvsfs_dir_entry *) inode.data;
       nodirs = inode.size/sizeof(struct vvsfs_dir_entry);
       for (k=0;k<nodirs;k++) {
-	dent = inode.data + k*sizeof(struct vvsfs_dir_entry);
         printf("%s : %d ",dent->name, dent->inode_number);
+		dent++;
       }
       printf("\n");
     } else {
