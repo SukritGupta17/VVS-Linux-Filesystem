@@ -1,3 +1,52 @@
+/*
+ * A Very Very Simple Filesystem
+   Eric McCreath 2006, 2008, 2010 - GPL
+
+   (based on the simplistic RAM filesystem McCreath 2001)   */
+
+/* to make use:
+      make -C /usr/src/linux-headers-2.6.32-23-generic/  SUBDIRS=$PWD modules
+	  (or just make, with the accompanying Makefile)
+
+   to load use:
+      sudo insmod vvsfs.ko
+	  (may need to copy vvsfs.ko to a local filesystem first)
+
+   to make a suitable filesystem:
+      dd of=myvvsfs.raw ba=1024k count=0 seek=1
+	  ./mkfs.vvsfs myvvsfs.raw
+	  (could also use a USB device etc.)
+
+   to mount use:
+      mkdir testdir
+      sudo mount -o loop -t vvsfs myvvsfs.raw testdir
+
+   to use a USB device:
+      create a suitable partition on USB device (exercise for reader)
+	  ./mkfs.vvsfs /dev/sdXn
+      where sdXn is the device name of the usb drive
+      mkdir testdir
+      sudo mount -t vvsfs /dev/sdXn testdir
+
+   to set up loop back approach:
+      dd if=/dev/zero of=loopdisk count=100
+      ./mkfs.vvsfs loopdisk
+      mkdir testdir
+      sudo mount -t vvsfs -o loop=/dev/loopX loopdisk testdir
+
+   use the file system:
+      cd testdir
+      echo hello > file1
+      cat file1
+      cd ..
+
+   unmount the filesystem:
+      sudo umount testdir
+
+   remove the module:
+      sudo rmmod vvsfs 
+*/
+
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
@@ -7,52 +56,13 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-// #include <linux/smp_lock.h>
 #include <linux/statfs.h>
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
 #include <linux/kernel.h>
-
 #include <asm/uaccess.h>
 
 #include "vvsfs.h"
-
-struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
-
-/* A Very Very Simple Filesystem
-   Eric McCreath 2006, 2008, 2010 - GPL
-
-   (based on the simplistic RAM filesystem McCreath 2001)   */
-
-/* to make use:
-      make -C /usr/src/linux-headers-2.6.32-23-generic/  SUBDIRS=$PWD modules
-   to load use:
-      sudo insmod vvsfs.ko
-   to mount use:
-      
-      sudo mount -t vvsfs /dev/sda1 testdir
-       (/dev/sda1 is the location of my usb drive that 
-         has been formated using mkfs.vvsfs)
-   to set up loop back approach:
-     dd if=/dev/zero of=loopdisk count=100
-     ./mkfs.vvsfs loopdisk
-     mkdir mountpoint
-     sudo mount loopdisk mountpoint -t vvsfs -o loop=/dev/loop3 
-
-   use the file system:
-     cd mountpoint
-     echo hello > file1
-     cat file1
-     cd ..
-
-
-   unmount the filesystem:
-     sudo umount mountpoint
-
-   remove the module:
-     sudo rmmod vvsfs 
-
-*/
 
 #define DEBUG 1
 
@@ -60,6 +70,7 @@ static struct inode_operations vvsfs_file_inode_operations;
 static struct file_operations vvsfs_file_operations;
 static struct super_operations vvsfs_ops;
 
+struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
 static void
 vvsfs_put_super(struct super_block *sb) {
   if (DEBUG) printk("vvsfs - put_super\n");
@@ -73,8 +84,6 @@ vvsfs_statfs(struct dentry *dentry, struct kstatfs *buf) {
   buf->f_namelen = MAXNAME;
   return 0;
 }
-
-
 
 // vvsfs_readblock - reads a block from the block device(this will copy over
 //                      the top of inode)
@@ -109,7 +118,6 @@ vvsfs_writeblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
 }
 
 // vvsfs_readdir - reads a directory and places the result using filldir
-
 static int
 vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir) {
  
@@ -150,7 +158,6 @@ vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir) {
   return 0;
 }
 
-
 // vvsfs_lookup - A directory name in a directory. It basically attaches the inode 
 //                of the file to the directory entry.
 static struct dentry *
@@ -188,7 +195,6 @@ vvsfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
   return NULL;
 }
 
-
 // vvsfs_empty_inode - finds the first free inode (returns -1 is unable to find one)
 static int vvsfs_empty_inode(struct super_block *sb) {
   struct vvsfs_inode block;
@@ -217,10 +223,6 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
   inode = new_inode(sb);
   if (!inode) return NULL;
  
-//  inode->i_sb = sb;
-//  inode->i_flags = 0;
-  
- 
   /* find a spare inode in the vvsfs */
   newinodenumber = vvsfs_empty_inode(sb);
   if (newinodenumber == -1) {
@@ -234,17 +236,12 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
   
   vvsfs_writeblock(sb,newinodenumber,&block);
   
-
   inode->i_ino = newinodenumber;
-  
-//  inode->i_nlink = 1;
-  inode->i_size = 0;
   
   inode->i_uid = 0;
   inode->i_gid = 0;
   
   inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
-  
    
   inode->i_mode = S_IRUGO|S_IWUGO|S_IFREG;
   inode->i_op = NULL;
@@ -325,7 +322,6 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   }  
   sb = inode->i_sb;
 
-
   vvsfs_readblock(sb,inode->i_ino,&filedata);
 
   if (filp->f_flags & O_APPEND)
@@ -345,19 +341,16 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   inode->i_size = filedata.size;
 
   vvsfs_writeblock(sb,inode->i_ino,&filedata);
- 
   
   if (DEBUG) printk("vvsfs - file write done : %zu ppos %Ld\n",count,*ppos);
   
   return count;
 }
 
-
 // vvsfs_file_read - read data from a file
 static ssize_t
 vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
-
   struct vvsfs_inode filedata; 
   struct inode *inode = filp->f_dentry->d_inode;
   char                    *start;
@@ -366,8 +359,6 @@ vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
   struct super_block * sb;
   
   if (DEBUG) printk("vvsfs - file read - count : %zu ppos %Ld\n",count,*ppos);
-
-
 
   if (!inode) {
     printk("vvsfs - Problem with file inode\n");
@@ -387,16 +378,15 @@ vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
   printk("r : readblock\n");
   vvsfs_readblock(sb,inode->i_ino,&filedata);
 
-
   start = buf;
    printk("rr\n");
   size = MIN (inode->i_size - *ppos,count);
 
- printk("readblock : %zu\n", size);
+  printk("readblock : %zu\n", size);
   offset = *ppos;            
   *ppos += size;
 
- printk("r copy_to_user\n");
+  printk("r copy_to_user\n");
 
   if (copy_to_user(buf,filedata.data + offset,size)) 
     return -EIO;
@@ -406,12 +396,10 @@ vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
   return size;
 }
 
-
 static struct file_operations vvsfs_file_operations = {
         read: vvsfs_file_read,        /* read */
         write: vvsfs_file_write,       /* write */
 };
-
 
 static struct inode_operations vvsfs_file_inode_operations = {
 };
@@ -424,8 +412,6 @@ static struct inode_operations vvsfs_dir_inode_operations = {
    create:     vvsfs_create,                   /* create */
    lookup:     vvsfs_lookup,           /* lookup */
 };
-
-
 
 // vvsfs_iget - get the inode from the super block
 struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
@@ -446,7 +432,6 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
 
-//    inode->i_nlink = 1;
     inode->i_size = filedata.size;
  
     inode->i_uid = 0;
@@ -454,7 +439,6 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
 
-  
     if (filedata.is_directory) {
         inode->i_mode = S_IRUGO|S_IWUGO|S_IFDIR;
         inode->i_op = &vvsfs_dir_inode_operations;
@@ -464,12 +448,10 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
         inode->i_op = &vvsfs_file_inode_operations;
         inode->i_fop = &vvsfs_file_operations;
     }
-     
+
     unlock_new_inode(inode);
     return inode;
 }
-
-
 
 // vvsfs_fill_super - read the super block (this is simple as we do not
 //                    have one in this file system)
@@ -493,10 +475,8 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
   i->i_fop = &vvsfs_dir_operations; 
   printk("inode %p\n", i);
 
-
   hblock = bdev_logical_block_size(s->s_bdev);
   if (hblock > BLOCKSIZE) {
-    
      printk("device blocks are too small!!");
      return -1;
   }
@@ -504,45 +484,29 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
   set_blocksize(s->s_bdev, BLOCKSIZE);
   s->s_blocksize = BLOCKSIZE;
   s->s_blocksize_bits = BLOCKSIZE_BITS;
-
-
-//  s->s_root = d_alloc_root(i);           /*2.4*/
   s->s_root = d_make_root(i);
 
   return 0;
 }
-
-
 
 static struct super_operations vvsfs_ops = {
   statfs: vvsfs_statfs,
   put_super: vvsfs_put_super,
 };
 
-
-// static int vvsfs_get_sb(struct file_system_type *fs_type,
-//         int flags, const char *dev_name, void *data, struct vfsmount *mnt)
-// {
-//         return get_sb_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super, mnt);
-// }
-//
 static struct dentry *vvsfs_mount(struct file_system_type *fs_type,
 				    int flags, const char *dev_name, void *data)
 {
-		    return mount_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super);
+  return mount_bdev(fs_type, flags, dev_name, data, vvsfs_fill_super);
 }
 
-
 static struct file_system_type vvsfs_type = {
-        .owner          = THIS_MODULE,
-        .name           = "vvsfs",
-		.mount			= vvsfs_mount,
-//        .get_sb         = vvsfs_get_sb,
-        .kill_sb        = kill_block_super,
-        .fs_flags       = FS_REQUIRES_DEV,
+  .owner	= THIS_MODULE,
+  .name		= "vvsfs",
+  .mount	= vvsfs_mount,
+  .kill_sb	= kill_block_super,
+  .fs_flags	= FS_REQUIRES_DEV,
 };
-
-
 
 int init_vvsfs_module(void)
 {
@@ -558,21 +522,4 @@ void cleanup_vvsfs_module(void)
 
 module_init(init_vvsfs_module);
 module_exit(cleanup_vvsfs_module);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
