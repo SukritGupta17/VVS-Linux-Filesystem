@@ -3,11 +3,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/mman.h>
 
-
-main(int argc, char *argv[]) {
-
+int main(int argc, char *argv[])
+{
   int dfile, filesize;
 
   if (argc != 3) {
@@ -19,15 +17,14 @@ main(int argc, char *argv[]) {
 
   if (sscanf(argv[2],"%d",&filesize) != 1) {
     printf("Problem with number format\n");
-    return -1;
-
+    return 1;
   }
 
   
   if (ftruncate(dfile,filesize)) {
     printf("Problem with ftruncate\n");
-    return -1;
+    return 1;
   }
 
-
+  return 0;
 }
