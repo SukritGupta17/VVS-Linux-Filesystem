@@ -60,6 +60,7 @@
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <asm/uaccess.h>
 
 #include "vvsfs.h"
@@ -117,45 +118,53 @@ vvsfs_writeblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
   return BLOCKSIZE;
 }
 
-// vvsfs_readdir - reads a directory and places the result using filldir
 static int
-vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir) {
- 
-  struct vvsfs_inode dirdata;
-  struct inode *i;
-  int nodirs;
-  struct vvsfs_dir_entry *dent;
-  int error, k;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+// vvsfs_readdir - reads a directory and places the result using filldir
+vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
+#else
+vvsfs_readdir(struct file *filp, struct dir_context *ctx)
+#endif
+{
+	struct inode *i;
+	struct vvsfs_inode dirdata;
+	int num_dirs;
+	struct vvsfs_dir_entry *dent;
+	int error, k;
 
-  if (DEBUG) printk("vvsfs - readdir\n");
+	if (DEBUG) printk("vvsfs - readdir\n");
 
+	i = file_inode(filp);
+	vvsfs_readblock(i->i_sb, i->i_ino, &dirdata);
+	num_dirs = dirdata.size / sizeof(struct vvsfs_dir_entry);
 
-  i = filp->f_dentry->d_inode;
+	if (DEBUG) printk("Number of entries %d fpos %Ld\n", num_dirs, filp->f_pos);
 
-  vvsfs_readblock(i->i_sb,i->i_ino,&dirdata);
-  nodirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
-
-  if (DEBUG) printk("Number of entries %d fpos %Ld\n",nodirs, filp->f_pos);
-
-  error = 0;
-  k=0;
-  while (!error && filp->f_pos < dirdata.size && k<nodirs) {
-
-    dent = (struct vvsfs_dir_entry *) ((dirdata.data) + k*sizeof(struct vvsfs_dir_entry));
-
-    printk("adding name : %s ino : %d\n",dent->name, dent->inode_number);
-    error = filldir(dirent, 
+	error = 0;
+	k=0;
+	dent = (struct vvsfs_dir_entry *) &dirdata.data;
+	while (!error && filp->f_pos < dirdata.size && k < num_dirs) {
+		printk("adding name : %s ino : %d\n",dent->name, dent->inode_number);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+		error = filldir(dirent, 
 		    dent->name, strlen(dent->name), filp->f_pos, dent->inode_number,DT_REG);
-    if (error)
-      break;
+		if (error)
+			break;
+		filp->f_pos += sizeof(struct vvsfs_dir_entry);
+#else
+		if (dent->inode_number) {
+			if (!dir_emit (ctx, dent->name, strnlen (dent->name, MAXNAME),
+				dent->inode_number, DT_UNKNOWN)) return 0;
+		}
+		ctx->pos += sizeof(struct vvsfs_dir_entry);
+#endif
+		k++;
+		dent++;
+	}
+	// update_atime(i);
+	printk("done readdir\n");
 
-    filp->f_pos += sizeof(struct vvsfs_dir_entry);
-    k++;
-  }
- // update_atime(i);
-  printk("done readdir\n");
-
-  return 0;
+	return 0;
 }
 
 // vvsfs_lookup - A directory name in a directory. It basically attaches the inode 
@@ -164,7 +173,7 @@ static struct dentry *
 vvsfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 
-  int nodirs;
+  int num_dirs;
   int k;
   struct vvsfs_inode dirdata;
   struct inode *inode = NULL;
@@ -172,11 +181,10 @@ vvsfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 
   if (DEBUG) printk("vvsfs - lookup\n");
 
-
   vvsfs_readblock(dir->i_sb,dir->i_ino,&dirdata);
-  nodirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
+  num_dirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
 
-  for (k=0;k<nodirs;k++) {
+  for (k=0;k < num_dirs;k++) {
     dent = (struct vvsfs_dir_entry *) ((dirdata.data) + k*sizeof(struct vvsfs_dir_entry));
     
     if ((strlen(dent->name) == dentry->d_name.len) && 
@@ -207,7 +215,7 @@ static int vvsfs_empty_inode(struct super_block *sb) {
 }
 
 // vvsfs_new_inode - find and construct a new inode.
-struct inode * vvsfs_new_inode(const struct inode * dir)
+struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode)
 {
   struct vvsfs_inode block;
   struct super_block * sb;
@@ -236,14 +244,10 @@ struct inode * vvsfs_new_inode(const struct inode * dir)
   
   vvsfs_writeblock(sb,newinodenumber,&block);
   
+  inode_init_owner(inode, dir, mode);
   inode->i_ino = newinodenumber;
-  
-  inode->i_uid = 0;
-  inode->i_gid = 0;
-  
   inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
    
-  inode->i_mode = S_IRUGO|S_IWUGO|S_IFREG;
   inode->i_op = NULL;
   
   insert_inode_hash(inode);
@@ -256,14 +260,14 @@ static int
 vvsfs_create(struct inode *dir, struct dentry* dentry, umode_t mode, bool excl)
 {
   struct vvsfs_inode dirdata;
-  int nodirs;
+  int num_dirs;
   struct vvsfs_dir_entry *dent;
 
   struct inode * inode;
 
   if (DEBUG) printk("vvsfs - create : %s\n",dentry->d_name.name);
 
-  inode = vvsfs_new_inode(dir);
+  inode = vvsfs_new_inode(dir, S_IRUGO|S_IWUGO|S_IFREG);
   if (!inode)
     return -ENOSPC;
   inode->i_op = &vvsfs_file_inode_operations;
@@ -274,14 +278,14 @@ vvsfs_create(struct inode *dir, struct dentry* dentry, umode_t mode, bool excl)
   if (!dir) return -1;
 
   vvsfs_readblock(dir->i_sb,dir->i_ino,&dirdata);
-  nodirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
-  dent = (struct vvsfs_dir_entry *) ((dirdata.data) + nodirs*sizeof(struct vvsfs_dir_entry));
+  num_dirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
+  dent = (struct vvsfs_dir_entry *) ((dirdata.data) + num_dirs*sizeof(struct vvsfs_dir_entry));
 
   strncpy(dent->name, dentry->d_name.name,dentry->d_name.len);
   dent->name[dentry->d_name.len] = '\0';
   
 
-  dirdata.size = (nodirs + 1) * sizeof(struct vvsfs_dir_entry);
+  dirdata.size = (num_dirs + 1) * sizeof(struct vvsfs_dir_entry);
  
 
   dent->inode_number = inode->i_ino;
@@ -405,7 +409,14 @@ static struct inode_operations vvsfs_file_inode_operations = {
 };
 
 static struct file_operations vvsfs_dir_operations = {
- readdir:        vvsfs_readdir,          /* readdir */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+	.readdir =	vvsfs_readdir,          /* readdir */
+#else
+	.llseek =	generic_file_llseek,
+	.read	=	generic_read_dir,
+	.iterate =	vvsfs_readdir,
+	.fsync	=	generic_file_fsync,
+#endif
 };
 
 static struct inode_operations vvsfs_dir_inode_operations = {
@@ -432,12 +443,12 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
 
-    inode->i_size = filedata.size;
+	inode->i_size = filedata.size;
  
-    inode->i_uid = 0;
-    inode->i_gid = 0;
+//	inode->i_uid = (kuid_t) 0;
+//	inode->i_gid = (kgid_t) 0;
 
-    inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
+	inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
 
     if (filedata.is_directory) {
         inode->i_mode = S_IRUGO|S_IWUGO|S_IFDIR;
@@ -508,18 +519,18 @@ static struct file_system_type vvsfs_type = {
   .fs_flags	= FS_REQUIRES_DEV,
 };
 
-int init_vvsfs_module(void)
+static int __init vvsfs_init(void)
 {
-  printk("Registering the vvsfs.\n");
+  printk("Registering vvsfs\n");
   return register_filesystem(&vvsfs_type);
 }
 
-void cleanup_vvsfs_module(void)
+static void __exit vvsfs_exit(void)
 {
   printk("Unregistering the vvsfs.\n");
   unregister_filesystem(&vvsfs_type);
 }
 
-module_init(init_vvsfs_module);
-module_exit(cleanup_vvsfs_module);
-
+module_init(vvsfs_init);
+module_exit(vvsfs_exit);
+MODULE_LICENSE("GPL");
