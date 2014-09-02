@@ -134,7 +134,11 @@ vvsfs_readdir(struct file *filp, struct dir_context *ctx)
 
 	if (DEBUG) printk("vvsfs - readdir\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+	i = filp->f_dentry->d_inode;
+#else
 	i = file_inode(filp);
+#endif
 	vvsfs_readblock(i->i_sb, i->i_ino, &dirdata);
 	num_dirs = dirdata.size / sizeof(struct vvsfs_dir_entry);
 
