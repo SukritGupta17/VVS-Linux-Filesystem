@@ -16,7 +16,7 @@ include Kbuild
 
 else
 # normal makefile
-KDIR ?= /lib/modules/`uname -r`/build
+KDIR ?= /usr/src/linux-headers-`uname -r`
 
 kernel_mod:
 	$(MAKE) -C $(KDIR) M=$$PWD

@@ -13,8 +13,8 @@
 	  (may need to copy vvsfs.ko to a local filesystem first)
 
    to make a suitable filesystem:
-      dd of=myvvsfs.raw ba=1024k count=0 seek=1
-	  ./mkfs.vvsfs myvvsfs.raw
+      dd of=myvvsfs.raw if=/dev/zero bs=512 count=100
+      ./mkfs.vvsfs myvvsfs.raw
 	  (could also use a USB device etc.)
 
    to mount use:
@@ -27,12 +27,6 @@
       where sdXn is the device name of the usb drive
       mkdir testdir
       sudo mount -t vvsfs /dev/sdXn testdir
-
-   to set up loop back approach:
-      dd if=/dev/zero of=loopdisk count=100
-      ./mkfs.vvsfs loopdisk
-      mkdir testdir
-      sudo mount -t vvsfs -o loop=/dev/loopX loopdisk testdir
 
    use the file system:
       cd testdir
@@ -86,7 +80,7 @@ vvsfs_statfs(struct dentry *dentry, struct kstatfs *buf) {
   return 0;
 }
 
-// vvsfs_readblock - reads a block from the block device(this will copy over
+// vvsfs_readblock - reads a block from the block device (this will copy over
 //                      the top of inode)
 static int
 vvsfs_readblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
@@ -308,7 +302,11 @@ static ssize_t
 vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
   struct vvsfs_inode filedata; 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
   struct inode *inode = filp->f_dentry->d_inode;
+#else
+  struct inode *inode = filp->f_path.dentry->d_inode;
+#endif
   ssize_t pos;
   struct super_block * sb;
   char * p;
@@ -360,7 +358,11 @@ static ssize_t
 vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
   struct vvsfs_inode filedata; 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
   struct inode *inode = filp->f_dentry->d_inode;
+#else
+  struct inode *inode = filp->f_path.dentry->d_inode;
+#endif
   char                    *start;
   ssize_t                  offset, size;
 
