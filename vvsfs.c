@@ -160,6 +160,9 @@ vvsfs_readdir(struct file *filp, struct dir_context *ctx)
 		dent++;
 	}
 	// update_atime(i);
+	i->i_size = dirdata.size;
+	if (DEBUG) printk("inode->i_size: %llu\n", i->i_size);
+	mark_inode_dirty(i);
 	printk("done readdir\n");
 
 	return 0;
@@ -293,6 +296,9 @@ vvsfs_create(struct inode *dir, struct dentry* dentry, umode_t mode, bool excl)
 
   d_instantiate(dentry, inode);
 
+  dir->i_size = dirdata.size;
+  mark_inode_dirty(dir);
+
   printk("File created %ld\n",inode->i_ino);
   return 0;
 }
@@ -351,6 +357,58 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   if (DEBUG) printk("vvsfs - file write done : %zu ppos %Ld\n",count,*ppos);
   
   return count;
+}
+
+// vvsfs_unlink - unlink a file
+static int vvsfs_unlink(struct inode * dir, struct dentry *dentry)
+{
+	int num_dirs;
+	int k,i;
+	struct inode *inode = NULL;
+	struct vvsfs_dir_entry *dent;
+	struct vvsfs_dir_entry *dent1, *dent2;
+	struct vvsfs_inode dirdata;
+	struct vvsfs_inode dentdata;
+
+	if (DEBUG) printk("vvsfs - unlink\n");
+
+	vvsfs_readblock(dir->i_sb, dir->i_ino, &dirdata);
+	num_dirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
+
+	for (k=0;k < num_dirs;k++) {
+		dent = (struct vvsfs_dir_entry *) ((dirdata.data) + k*sizeof(struct vvsfs_dir_entry));
+
+		if ((strlen(dent->name) == dentry->d_name.len) && 
+				strncmp(dent->name, dentry->d_name.name, dentry->d_name.len) == 0) {
+			inode = vvsfs_iget(dir->i_sb, dent->inode_number);
+
+			if (!inode)
+				return -ENOENT;
+			vvsfs_readblock(inode->i_sb, inode->i_ino, &dentdata);
+			dentdata.is_empty = true;
+			dentdata.is_directory = false;
+			dentdata.size = 0;
+
+			dirdata.size = dirdata.size - sizeof(struct vvsfs_dir_entry);
+			for (i=k+1;i < num_dirs;i++) {
+				dent1 = (struct vvsfs_dir_entry *) ((dirdata.data) + 
+							(i-1)*sizeof(struct vvsfs_dir_entry));		
+				dent2 = (struct vvsfs_dir_entry *) ((dirdata.data) + 
+							i*sizeof(struct vvsfs_dir_entry));
+				strcpy(dent1->name, dent2->name);
+				dent1->inode_number = dent2->inode_number;
+			}
+
+			vvsfs_writeblock(inode->i_sb, inode->i_ino, &dentdata);
+			vvsfs_writeblock(dir->i_sb, dir->i_ino, &dirdata);
+			
+			mark_inode_dirty(dir);
+			inode_dec_link_count(inode);
+			return 0;
+			if (DEBUG) printk("vvsfs - unlink done\n");
+		}		
+	}
+	return -ENOENT;
 }
 
 // vvsfs_file_read - read data from a file
@@ -428,6 +486,7 @@ static struct file_operations vvsfs_dir_operations = {
 static struct inode_operations vvsfs_dir_inode_operations = {
    create:     vvsfs_create,                   /* create */
    lookup:     vvsfs_lookup,           /* lookup */
+   unlink:     vvsfs_unlink,
 };
 
 // vvsfs_iget - get the inode from the super block
