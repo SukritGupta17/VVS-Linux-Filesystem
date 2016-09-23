@@ -470,8 +470,7 @@ static int vvsfs_rmdir (struct inode * dir, struct dentry *dentry)
 		err = vvsfs_unlink(dir, dentry);
 		if (!err) {
 			inode->i_size = 0;
-			inode_dec_link_count(inode);
-			inode_dec_link_count(dir);
+		//	inode_dec_link_count(inode);
 		}
 	}
 	return err;
