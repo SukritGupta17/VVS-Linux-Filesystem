@@ -56,6 +56,8 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <asm/uaccess.h>
+#include <linux/quotaops.h>
+#include <linux/posix_acl.h>
 
 #include "vvsfs.h"
 
@@ -475,6 +477,76 @@ static int vvsfs_rmdir (struct inode * dir, struct dentry *dentry)
 	}
 	return err;
 }
+static int vvsfs_setsize(struct inode *inode, loff_t newsize)
+{
+	int error;
+	struct vvsfs_inode filedata;
+	int i;
+	
+	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)))
+		return -EINVAL;
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+		return -EPERM;
+	inode_dio_wait(inode);
+	truncate_setsize(inode, newsize);
+	vvsfs_readblock(inode->i_sb, inode->i_ino,&filedata);
+	if (filedata.size > newsize) {
+		filedata.size = newsize;
+	} else {
+		for (i = filedata.size; i < newsize; i++)
+			filedata.data[i] = 0;
+		filedata.size = newsize;
+	}
+	vvsfs_writeblock(inode->i_sb, inode->i_ino,&filedata);
+	if (DEBUG) printk("vvsfs - truncate done : %d %ld", filedata.size, newsize);
+	
+	inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;
+	if (inode_needs_sync(inode)) {
+		sync_mapping_buffers(inode->i_mapping);
+		sync_inode_metadata(inode,1);
+	} else {
+		mark_inode_dirty(inode);	
+	}
+	
+	return 0;
+}
+
+//vvsfs_setattr - truncate
+int vvsfs_setattr(struct dentry *dentry, struct iattr *iattr)
+{
+	struct inode *inode = d_inode(dentry);
+	int error;
+	if (iattr->ia_size > MAXFILESIZE)
+		return -EPERM;
+	error = inode_change_ok(inode, iattr);
+	if (error)
+		return error;
+
+	if (DEBUG) printk("vvsfs - truncate");
+
+	if (is_quota_modification(inode, iattr)) {
+		error = dquot_initialize(inode);
+		if (error)
+			return error;
+	}
+	if ((iattr->ia_valid & ATTR_UID && !uid_eq(iattr->ia_uid, inode->i_uid)) || (iattr->ia_valid & ATTR_GID && !gid_eq(iattr->ia_gid, inode->i_gid))) {
+		error = dquot_transfer(inode, iattr);
+		if (error)
+			return error;
+	}
+	if (iattr->ia_valid & ATTR_SIZE && iattr->ia_size != inode->i_size) {
+	
+		error = vvsfs_setsize(inode, iattr->ia_size);
+		if (error)
+			return error;
+	}
+	setattr_copy(inode, iattr);
+	if (iattr->ia_valid & ATTR_MODE)
+		error = posix_acl_chmod(inode, inode->i_mode);
+	mark_inode_dirty(inode);
+
+	return error;
+}
 // vvsfs_file_read - read data from a file
 static ssize_t
 vvsfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
@@ -534,6 +606,7 @@ static struct file_operations vvsfs_file_operations = {
 };
 
 static struct inode_operations vvsfs_file_inode_operations = {
+	.setattr    =     vvsfs_setattr,
 };
 
 static struct file_operations vvsfs_dir_operations = {
@@ -553,6 +626,7 @@ static struct inode_operations vvsfs_dir_inode_operations = {
    .unlink     =     vvsfs_unlink,
    .mkdir      =     vvsfs_mkdir,
    .rmdir      =     vvsfs_rmdir,
+   .setattr    =     vvsfs_setattr,
 };
 
 // vvsfs_iget - get the inode from the super block
