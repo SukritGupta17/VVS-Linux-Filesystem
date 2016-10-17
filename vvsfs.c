@@ -58,6 +58,7 @@
 #include <asm/uaccess.h>
 #include <linux/quotaops.h>
 #include <linux/posix_acl.h>
+#include <linux/types.h>
 
 #include "vvsfs.h"
 
@@ -165,6 +166,14 @@ vvsfs_readdir(struct file *filp, struct dir_context *ctx)
 	}
 	// update_atime(i);
 	i->i_size = dirdata.size;
+	// update uid gid mod
+	i_uid_write(i, dirdata.i_uid);
+	i_gid_write(i, dirdata.i_gid);
+	if (dirdata.i_mode == 0)
+		i->i_mode = S_IRUGO|S_IWUGO|S_IXUGO|S_IFDIR;
+	else
+		i->i_mode = dirdata.i_mode;
+
 	if (DEBUG) printk("inode->i_size: %llu\n", i->i_size);
 	mark_inode_dirty(i);
 	printk("done readdir\n");
@@ -246,10 +255,16 @@ struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode)
   block.is_empty = false;
   block.size = 0;
   block.is_directory = false;
-  
+
+  // record gid and uid
+  inode_init_owner(inode, dir, mode);
+  block.i_gid = i_gid_read(inode);
+  block.i_uid = i_uid_read(inode); 
+  block.i_mode = inode->i_mode;
+  printk("uid: %ld, gid: %ld, i_mode : %ld\n", block.i_uid, block.i_gid, block.i_mode);
+
   vvsfs_writeblock(sb,newinodenumber,&block);
   
-  inode_init_owner(inode, dir, mode);
   inode->i_ino = newinodenumber;
   inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
    
@@ -516,12 +531,15 @@ int vvsfs_setattr(struct dentry *dentry, struct iattr *iattr)
 {
 	struct inode *inode = d_inode(dentry);
 	int error;
-	if (iattr->ia_size > MAXFILESIZE)
-		return -EPERM;
+	if (iattr->ia_size > MAXFILESIZE){
+		printk("hello%ld",iattr->ia_size);
+		return 0;
+	}
 	error = inode_change_ok(inode, iattr);
-	if (error)
+	if (error) {
+		printk("helllo2");
 		return error;
-
+	}
 	if (DEBUG) printk("vvsfs - truncate");
 
 	if (is_quota_modification(inode, iattr)) {
@@ -655,12 +673,20 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
 	inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
 
+	i_uid_write(inode, filedata.i_uid);
+	i_gid_write(inode, filedata.i_gid);
     if (filedata.is_directory) {
-        inode->i_mode = S_IRUGO|S_IWUGO|S_IFDIR;
+	    if (filedata.i_mode == 0)
+		inode->i_mode = S_IRUGO|S_IWUGO|S_IFDIR;
+	    else
+		inode->i_mode = filedata.i_mode;
         inode->i_op = &vvsfs_dir_inode_operations;
         inode->i_fop = &vvsfs_dir_operations;
     } else {
-        inode->i_mode = S_IRUGO|S_IWUGO|S_IFREG;
+	    if (filedata.i_mode == 0)
+		inode->i_mode = S_IRUGO|S_IWUGO|S_IFREG;
+	    else
+		inode->i_mode = filedata.i_mode;
         inode->i_op = &vvsfs_file_inode_operations;
         inode->i_fop = &vvsfs_file_operations;
     }

@@ -50,6 +50,8 @@ int main(int argc, char ** argv) {
     if (i == 0) {  // the first block is an empty directory
       inode.is_empty = 0;
       inode.is_directory = 1;
+      inode.i_uid = 1000;
+      inode.i_gid = 1000;
     } else {
       inode.is_empty = 1;
       inode.is_directory = 0;

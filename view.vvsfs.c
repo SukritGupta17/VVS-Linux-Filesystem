@@ -11,9 +11,10 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <linux/types.h>
 
 #include "vvsfs.h"
-
+typedef unsigned short umode_t;
 char* device_name;
 int device;
 
@@ -43,10 +44,9 @@ int main(int argc, char ** argv) {
     if (sizeof(struct vvsfs_inode) != read(device,&inode,sizeof(struct vvsfs_inode))) 
       die("inode read failed");
 
-    printf("%2d : empty : %s dir : %s size : %i data : ", i, 
+    printf("%2d : empty : %s dir : %s uid: %ld gid: %ld mode: %ld size : %i data : ", i, 
                        (inode.is_empty?"T":"F"), 
-                       (inode.is_directory?"T":"F"), 
-                       inode.size);
+                       (inode.is_directory?"T":"F"), inode.i_uid, inode.i_gid, inode.i_mode, inode.size);
 
 
     if (inode.is_directory) {
