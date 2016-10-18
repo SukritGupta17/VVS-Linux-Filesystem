@@ -44,9 +44,9 @@ int main(int argc, char ** argv) {
     if (sizeof(struct vvsfs_inode) != read(device,&inode,sizeof(struct vvsfs_inode))) 
       die("inode read failed");
 
-    printf("%2d : empty : %s dir : %s uid: %ld gid: %ld mode: %ld size : %i data : ", i, 
+    printf("%2d : empty : %s dir : %s uid: %ld gid: %ld mode: %ld size : %i nextinode: %d data : ", i, 
                        (inode.is_empty?"T":"F"), 
-                       (inode.is_directory?"T":"F"), inode.i_uid, inode.i_gid, inode.i_mode, inode.size);
+                       (inode.is_directory?"T":"F"), inode.i_uid, inode.i_gid, inode.i_mode, inode.size, inode.next_inode);
 
 
     if (inode.is_directory) {
@@ -60,7 +60,7 @@ int main(int argc, char ** argv) {
       printf("\n");
     } else {
        int j;
-       for (j=0;j< inode.size;j++) {
+       for (j=0;j< MAXFILESIZE;j++) {
          if (inode.data[j] == '\n') {
            printf("\\n");
 	 } else {

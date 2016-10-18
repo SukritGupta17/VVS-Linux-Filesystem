@@ -52,9 +52,11 @@ int main(int argc, char ** argv) {
       inode.is_directory = 1;
       inode.i_uid = 1000;
       inode.i_gid = 1000;
+      inode.next_inode = -1;
     } else {
       inode.is_empty = 1;
       inode.is_directory = 0;
+      inode.next_inode = -1;
     }
     inode.size = 0;
     for (k = 0;k< MAXFILESIZE;k++) inode.data[k] = 0;
