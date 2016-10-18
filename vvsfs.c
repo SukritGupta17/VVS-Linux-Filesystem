@@ -335,6 +335,7 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   ssize_t pos;
   struct super_block * sb;
   char * p;
+  int division, i ;
 
   if (DEBUG) printk("vvsfs - file write - count : %zu ppos %Ld\n",count,*ppos);
 
@@ -360,8 +361,16 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
   else
     pos = *ppos;
 
-  if (pos + count > MAXFILESIZE) return -ENOSPC;
+  division = pos / MAXFILESIZE;
+  if (pos % MAXFILESIZE == 0)
+	  division -= 1;
+  for (i = 0; i < division; i++ )
+  {
+	 vvsfs_readblock(sb, filedata.nextinode, &filedata); 
+  }
 
+  if (pos + count > MAXFILESIZE) return -ENOSPC;
+  
   filedata.size = pos+count;
   p = filedata.data + pos;
   if (copy_from_user(p,buf,count))
