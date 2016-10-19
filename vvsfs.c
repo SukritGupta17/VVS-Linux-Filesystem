@@ -427,6 +427,7 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 		if (copy_from_user(p,buf,MIN (MAXFILESIZE,countbk)))
 				return -ENOSPC;
 		buf += MIN (MAXFILESIZE,countbk);
+		filedata.size = MIN (MAXFILESIZE, countbk);
 		countbk -= MAXFILESIZE;
 		tmp = new_inode_no;
 		vvsfs_writeblock(sb, tmp,&filedata);
@@ -439,10 +440,11 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	}
 
   } else { 
+	  printk("count: %ld content: %s\n",count, filedata.data);
 	  if (copy_from_user(p,buf,count))
 	    return -ENOSPC;
 	  buf += count;
-	  printk("content: %s\n", filedata.data);
+	  printk("count: %ld content: %s\n",count, filedata.data);
 	  vvsfs_writeblock(sb, inode_no,&filedata);
   }
   vvsfs_readblock(sb,inode->i_ino,&filedata);
@@ -603,6 +605,7 @@ static int vvsfs_setsize(struct inode *inode, loff_t newsize)
 				filedata.next_inode = -1;
 				for (i = 0; i < MIN (MAXFILESIZE,count); i++)
 					filedata.data[i] = 0;
+				filedata.size = MIN (MAXFILESIZE, count);
 				count -= MAXFILESIZE;
 				int tmp = new_inode_no;
 				vvsfs_writeblock(sb, tmp,&filedata);
@@ -614,8 +617,11 @@ static int vvsfs_setsize(struct inode *inode, loff_t newsize)
 				vvsfs_writeblock(sb, tmp,&filedata);
 			}
 		} else {
-			for (i = size % MAXFILESIZE; i < count; i++)
+			for (i = size % MAXFILESIZE; i < count+size; i++) {
+				printk("%d\n",i);
 				filedata.data[i] = 0;
+			}
+			printk("filedata: %s\n", filedata.data);
 			vvsfs_writeblock(sb, inode_no,&filedata);
 		}
 

@@ -48,7 +48,6 @@ int main(int argc, char ** argv) {
                        (inode.is_empty?"T":"F"), 
                        (inode.is_directory?"T":"F"), inode.i_uid, inode.i_gid, inode.i_mode, inode.size, inode.next_inode);
 
-
     if (inode.is_directory) {
       int k, nodirs;
       struct vvsfs_dir_entry *dent = (struct vvsfs_dir_entry *) inode.data;
@@ -60,7 +59,7 @@ int main(int argc, char ** argv) {
       printf("\n");
     } else {
        int j;
-       for (j=0;j< MAXFILESIZE;j++) {
+       for (j=0;j< MIN (inode.size, MAXFILESIZE);j++) {
          if (inode.data[j] == '\n') {
            printf("\\n");
 	 } else {
