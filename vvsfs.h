@@ -24,6 +24,7 @@ struct vvsfs_inode {
 };
 
 struct vvsfs_dir_entry {
-  char name[MAXNAME+1];
+  int size;
+  char name[MAXNAME];
   int inode_number;
 };

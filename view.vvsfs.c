@@ -53,7 +53,7 @@ int main(int argc, char ** argv) {
       struct vvsfs_dir_entry *dent = (struct vvsfs_dir_entry *) inode.data;
       nodirs = inode.size/sizeof(struct vvsfs_dir_entry);
       for (k=0;k<nodirs;k++) {
-        printf("%s : %d ",dent->name, dent->inode_number);
+        printf("%d : %s : %d ;",dent->size,dent->name, dent->inode_number);
 		dent++;
       }
       printf("\n");
