@@ -523,10 +523,10 @@ static int vvsfs_unlink(struct inode * dir, struct dentry *dentry)
 	for (k=0;k < num_dirs;k++) {
 		dent = (struct vvsfs_dir_entry *) ((dirdata.data) + k*sizeof(struct vvsfs_dir_entry));
 		filename = get_dent_name(dent);
-		j = dent->size/MAXNAME + (dent->size%MAXNAME > 0?1:0);
 		if (strncmp(filename, dentry->d_name.name, dentry->d_name.len) == 0) {
 			inode = vvsfs_iget(dir->i_sb, dent->inode_number);
 
+			j = dent->size/MAXNAME + (dent->size%MAXNAME > 0?1:0);
 			if (!inode)
 				return -ENOENT;
 			remove_unused_inodes(inode->i_sb, inode->i_ino);
