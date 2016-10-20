@@ -5,7 +5,8 @@
 ## Remove (unlink)
 `vvsfs_unlink` was added to remove files. This part was done in the lab, but, in order to be comaptible with the additional function which is to remove the bounds of the file size and name sizes, some modifications were done in this part.
 
-Sample image:
+Sample image:  
+
 ![unlink](https://gitlab.cecs.anu.edu.au/u5900600/images/raw/a42120d6325b69cf9c9cb7c5f46fbaefbaa6e956/remove.png)
 
 ## Truncate
@@ -16,7 +17,8 @@ e.g.
 truncate -s 10 file1
 truncate -s 100 file1
 ```
-Sample image:
+Sample image:  
+
 ![truncate](https://gitlab.cecs.anu.edu.au/u5900600/images/raw/a42120d6325b69cf9c9cb7c5f46fbaefbaa6e956/truncate.png)
 
 
@@ -24,11 +26,13 @@ Sample image:
 Two routines, `vvsfs_mkdir` and `vvsfs_rmdir`, were implemented, `mkdir` and `rmdir` commands now be executed to create a directory and remove a directory.
 
 ### Make directory:
-Sample image:
+Sample image:  
+
 ![make dir](https://gitlab.cecs.anu.edu.au/u5900600/images/raw/a42120d6325b69cf9c9cb7c5f46fbaefbaa6e956/makedir.png)
 
 ### Remove directory:
-Sample image:
+Sample image:  
+
 ![remove dir](https://gitlab.cecs.anu.edu.au/u5900600/images/raw/a42120d6325b69cf9c9cb7c5f46fbaefbaa6e956/rmdir.png)
 
 
@@ -46,5 +50,6 @@ the inodes are connected to store larger files.
 The data is now encrypted before storing into raw file and is decrypted before the file is opened to read.
 This restricts users who don't have this particular file system to access and view the contents of all the files.
 
-Sample image:
+Sample image:  
+
 ![encryption](https://gitlab.cecs.anu.edu.au/u5900600/images/raw/a42120d6325b69cf9c9cb7c5f46fbaefbaa6e956/encrypt.png)
