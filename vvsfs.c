@@ -1,4 +1,3 @@
-
 /*
  * A Very Very Simple Filesystem
    Eric McCreath 2006, 2008, 2010 - GPL
@@ -99,7 +98,7 @@ vvsfs_readblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
   memcpy((void *) inode, (void *) bh->b_data, BLOCKSIZE);
   brelse(bh);
   int i;
-  for (i = 0; i < inode->size;i++)
+  for (i = 0; i < MIN (MAXFILESIZE, inode->size);i++)
 	  inode->data[i] = inode->data[i] ^ 'a' ;
   if (DEBUG) printk("vvsfs - readblock done : %d\n", inum);
   return BLOCKSIZE;
@@ -115,8 +114,8 @@ vvsfs_writeblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
 
   bh = sb_bread(sb,inum);
    int i;
-  for (i = 0; i < inode->size;i++)
-	  inode->data[i] = inode->data[i] ^ 'a';
+  for (i = 0; i < MIN (MAXFILESIZE,inode->size);i++)
+	  inode->data[i] =  inode->data[i] ^ 'a';
   memcpy(bh->b_data, inode, BLOCKSIZE);
   mark_buffer_dirty(bh);
   sync_dirty_buffer(bh);
