@@ -98,7 +98,7 @@ vvsfs_readblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
   memcpy((void *) inode, (void *) bh->b_data, BLOCKSIZE);
   brelse(bh);
   int i;
-  for (i = 0; i < MIN (MAXFILESIZE, inode->size);i++)
+  for (i = 0; i < MAXFILESIZE;i++)
 	  inode->data[i] = inode->data[i] ^ 'a' ;
   if (DEBUG) printk("vvsfs - readblock done : %d\n", inum);
   return BLOCKSIZE;
@@ -114,7 +114,7 @@ vvsfs_writeblock(struct super_block *sb, int inum, struct vvsfs_inode *inode) {
 
   bh = sb_bread(sb,inum);
    int i;
-  for (i = 0; i < MIN (MAXFILESIZE,inode->size);i++)
+  for (i = 0; i < MAXFILESIZE;i++)
 	  inode->data[i] =  inode->data[i] ^ 'a';
   memcpy(bh->b_data, inode, BLOCKSIZE);
   mark_buffer_dirty(bh);
@@ -438,6 +438,7 @@ vvsfs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 		countbk -= MAXFILESIZE;
 		tmp = new_inode_no;
 		vvsfs_writeblock(sb, tmp,&filedata);
+		vvsfs_readblock(sb, tmp,&filedata);
 		if (countbk > 0) {
 			new_inode_no = vvsfs_empty_inode(sb);
 			filedata.next_inode = new_inode_no;
@@ -616,6 +617,7 @@ static int vvsfs_setsize(struct inode *inode, loff_t newsize)
 				count -= MAXFILESIZE;
 				int tmp = new_inode_no;
 				vvsfs_writeblock(sb, tmp,&filedata);
+				vvsfs_readblock(sb, tmp,&filedata);
 				if (count > 0) {
 					new_inode_no = vvsfs_empty_inode(sb);
 					filedata.next_inode = new_inode_no;
